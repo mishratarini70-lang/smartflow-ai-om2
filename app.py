@@ -7,18 +7,19 @@ st.set_page_config(page_title="SmartFlow AI", layout="wide")
 st.title("🚗 SmartFlow AI – Rolling 5-Year Production & Inventory Simulator")
 
 st.markdown("""
-Dynamic 5-year production planning with inventory and demand uncertainty.
-Managers decide yearly. Inventory carries forward.
+Dynamic 5-year automobile production planning under demand and inflation uncertainty.
+Managers make decisions each year. Inventory carries forward.
 """)
 
-# ===============================
-# FIXED PARAMETERS
-# ===============================
+# =====================================================
+# FIXED SYSTEM PARAMETERS
+# =====================================================
 
 BASE_MONTHLY_DEMAND = 10000
 BREAKDOWN_PROB = 0.08
 SETUP_TIME = 45
 AVAILABLE_HOURS_MONTH = 160
+
 HOLDING_COST_PER_UNIT = 50
 SHORTAGE_PENALTY_PER_UNIT = 200
 
@@ -26,12 +27,12 @@ st.sidebar.header("🔒 System Assumptions")
 st.sidebar.write("Initial Monthly Demand: 10,000")
 st.sidebar.write("Demand Growth: Random (-10% to +25%)")
 st.sidebar.write("Inflation: Random (6% to 12%)")
-st.sidebar.write("Inventory Holding Cost: ₹50 per unit")
+st.sidebar.write("Holding Cost: ₹50 per unit")
 st.sidebar.write("Shortage Penalty: ₹200 per unit")
 
-# ===============================
-# SESSION STATE
-# ===============================
+# =====================================================
+# SESSION STATE INITIALIZATION
+# =====================================================
 
 if "year" not in st.session_state:
     st.session_state.year = 1
@@ -43,9 +44,9 @@ if "year" not in st.session_state:
 
 current_year = st.session_state.year
 
-# ===============================
-# YEARLY DECISION
-# ===============================
+# =====================================================
+# YEARLY DECISION INPUT
+# =====================================================
 
 if current_year <= 5:
 
@@ -63,27 +64,27 @@ if current_year <= 5:
         overtime = st.number_input("Overtime Hours", 0, 200, 20)
         maintenance_eff = st.slider("Maintenance Efficiency", 0.0, 1.0, 0.5)
 
-    st.write(f"Starting Inventory: {int(st.session_state.inventory)} units")
+    st.write(f"📦 Starting Inventory: {int(st.session_state.inventory)} units")
 
     if st.button("Simulate This Year"):
 
-        # ===============================
+        # ----------------------------
         # DEMAND SHOCK
-        # ===============================
+        # ----------------------------
 
         demand_growth = np.random.uniform(-0.10, 0.25)
         st.session_state.monthly_demand *= (1 + demand_growth)
         yearly_demand = st.session_state.monthly_demand * 12
 
-        # ===============================
+        # ----------------------------
         # INFLATION SHOCK
-        # ===============================
+        # ----------------------------
 
         inflation = np.random.uniform(0.06, 0.12)
 
-        # ===============================
-        # CAPACITY
-        # ===============================
+        # ----------------------------
+        # CAPACITY CALCULATION
+        # ----------------------------
 
         effective_breakdown = BREAKDOWN_PROB * (1 - maintenance_eff)
         yearly_hours = AVAILABLE_HOURS_MONTH * 12
@@ -95,9 +96,9 @@ if current_year <= 5:
 
         throughput = min(cap_body, cap_paint, cap_engine, cap_final)
 
-        # ===============================
+        # ----------------------------
         # INVENTORY LOGIC
-        # ===============================
+        # ----------------------------
 
         available_units = throughput + st.session_state.inventory
 
@@ -110,9 +111,9 @@ if current_year <= 5:
             ending_inventory = 0
             shortage = yearly_demand - available_units
 
-        # ===============================
+        # ----------------------------
         # COST CALCULATION
-        # ===============================
+        # ----------------------------
 
         machine_cost = 400 * (cap_body + cap_paint + cap_engine + cap_final)
         labor_cost = 50 * overtime * 12
@@ -125,49 +126,39 @@ if current_year <= 5:
 
         cost_per_unit = total_cost / max(units_sold, 1)
 
-        # ===============================
-        # STORE STATE
-        # ===============================
+        # ----------------------------
+        # STORE RESULTS
+        # ----------------------------
 
         st.session_state.inventory = ending_inventory
         st.session_state.total_cost += total_cost
         st.session_state.total_units += units_sold
 
-        st.session_state.results.append([
-            current_year,
-            demand_growth * 100,
-            yearly_demand,
-            throughput,
-            units_sold,
-            ending_inventory,
-            shortage,
-            inflation * 100,
-            total_cost,
-            cost_per_unit
-        ])
+        st.session_state.results.append({
+            "Year": current_year,
+            "Demand Growth (%)": demand_growth * 100,
+            "Demand": yearly_demand,
+            "Production": throughput,
+            "Units Sold": units_sold,
+            "Ending Inventory": ending_inventory,
+            "Shortage": shortage,
+            "Inflation (%)": inflation * 100,
+            "Total Cost": total_cost,
+            "Cost per Unit": cost_per_unit
+        })
 
         st.session_state.year += 1
-        st.success(f"Year {current_year} completed.")
+
+        st.success(f"Year {current_year} simulated successfully.")
         st.rerun()
 
-# ===============================
+# =====================================================
 # DISPLAY RESULTS
-# ===============================
+# =====================================================
 
-if st.session_state.year > 1:
+if len(st.session_state.results) > 0:
 
-    df = pd.DataFrame(st.session_state.results, columns=[
-        "Year",
-        "Demand Growth (%)",
-        "Demand",
-        "Production",
-        "Units Sold",
-        "Ending Inventory",
-        "Shortage",
-        "Inflation (%)",
-        "Total Cost",
-        "Cost per Unit"
-    ])
+    df = pd.DataFrame(st.session_state.results)
 
     st.subheader("📊 Simulation Progress")
     st.dataframe(df, use_container_width=True)
@@ -189,11 +180,11 @@ if st.session_state.year > 1:
     st.line_chart(df.set_index("Year")["Cost per Unit"])
 
     if st.session_state.year > 5:
-        st.success("5-Year Simulation Completed!")
+        st.success("🎯 5-Year Simulation Completed!")
 
-# ===============================
-# RESET
-# ===============================
+# =====================================================
+# RESET BUTTON
+# =====================================================
 
 if st.button("🔄 Restart Simulation"):
     for key in list(st.session_state.keys()):
