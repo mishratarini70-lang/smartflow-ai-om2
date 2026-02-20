@@ -1,3 +1,61 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+
+st.set_page_config(page_title="SmartFlow AI", layout="wide")
+
+st.title("🚗 SmartFlow AI – 5-Year Strategic Production Optimizer")
+
+st.markdown("""
+This simulation models a 4-stage automobile manufacturing flow shop 
+over a 5-year horizon incorporating macroeconomic demand trends and inflation variability.
+""")
+
+# ===============================
+# FIXED SYSTEM PARAMETERS
+# ===============================
+
+BASE_MONTHLY_DEMAND = 10000
+BREAKDOWN_PROB = 0.08
+SETUP_TIME = 45
+AVAILABLE_HOURS_MONTH = 160
+
+# Hidden Economic Assumptions
+PROJECTED_DEMAND_GROWTH = 0.10  # 10%
+PROJECTED_INFLATION = 0.08      # 8%
+
+st.sidebar.header("🔒 Fixed Parameters")
+st.sidebar.write("Projected Annual Demand Growth: 10%")
+st.sidebar.write("Projected Annual Inflation: 8%")
+st.sidebar.write("Note: Economic shocks and variability are internally modeled.")
+
+# ===============================
+# DECISION VARIABLES
+# ===============================
+
+st.header("⚙️ Decision Variables")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    machines_body = st.number_input("Machines – Body Shop", 1, 20, 3)
+    machines_paint = st.number_input("Machines – Paint Shop", 1, 20, 2)
+    machines_engine = st.number_input("Machines – Engine Assembly", 1, 20, 3)
+    machines_final = st.number_input("Machines – Final Assembly", 1, 20, 4)
+
+with col2:
+    overtime = st.number_input("Overtime Hours per Month", 0, 200, 20)
+    maintenance_eff = st.slider("Maintenance Efficiency (0–1)", 0.0, 1.0, 0.5)
+
+investment_year = st.selectbox(
+    "Add 1 Extra Machine to Bottleneck in Year:",
+    [None, 2, 3, 4, 5]
+)
+
+# ===============================
+# RUN SIMULATION
+# ===============================
+
 if st.button("🚀 Run 5-Year Simulation"):
 
     years = 5
