@@ -4,39 +4,52 @@ import numpy as np
 
 st.set_page_config(page_title="SmartFlow AI", layout="wide")
 
-st.title("🚗 SmartFlow AI – 5-Year Production & Cost Simulator")
+st.title("🚗 SmartFlow AI – 5-Year Production & Inventory Simulator")
 
 st.markdown("""
-Rolling 5-year automobile production planning under demand uncertainty.
-Cost breakdown visible during decision selection and in yearly results.
+Dynamic rolling production system with stage-level heterogeneity,
+inventory carryover, cost breakdown and bottleneck detection.
 """)
 
 # =====================================================
-# FIXED SYSTEM PARAMETERS
+# FIXED PARAMETERS
 # =====================================================
 
 BASE_MONTHLY_DEMAND = 10000
 BREAKDOWN_PROB = 0.08
-SETUP_TIME = 45
 AVAILABLE_HOURS_MONTH = 160
 UNITS_PER_MACHINE_PER_HOUR = 7
 
-HOLDING_COST_PER_UNIT = 50
-SHORTAGE_PENALTY_PER_UNIT = 200
+# Stage productivity factors
+BODY_FACTOR = 5
+PAINT_FACTOR = 7
+ENGINE_FACTOR = 3
+FINAL_FACTOR = 4
+
+# Costs
 MACHINE_COST_PER_HOUR = 400
 LABOR_COST_PER_HOUR = 50
-SETUP_COST_PER_HOUR = 1000
+SETUP_COST_PER_YEAR = 5400
+HOLDING_COST_PER_UNIT = 50
+SHORTAGE_PENALTY_PER_UNIT = 200
+
+# =====================================================
+# SIDEBAR
+# =====================================================
 
 st.sidebar.header("🔒 System Assumptions")
 st.sidebar.write("Initial Monthly Demand: 10,000")
 st.sidebar.write("Demand Growth: Random (-10% to +25%)")
 st.sidebar.write("Inflation: Random (6% to 12%)")
 st.sidebar.write(f"Units per Machine per Hour: {UNITS_PER_MACHINE_PER_HOUR}")
-st.sidebar.write("Holding Cost: ₹50 per unit")
-st.sidebar.write("Shortage Penalty: ₹200 per unit")
+st.sidebar.write("Stage Productivity Factors:")
+st.sidebar.write(f"Body: {BODY_FACTOR}")
+st.sidebar.write(f"Paint: {PAINT_FACTOR}")
+st.sidebar.write(f"Engine: {ENGINE_FACTOR}")
+st.sidebar.write(f"Final: {FINAL_FACTOR}")
 
 # =====================================================
-# SAFE SESSION STATE
+# SESSION STATE SAFE INIT
 # =====================================================
 
 defaults = {
@@ -65,31 +78,29 @@ if current_year <= 5:
     col1, col2 = st.columns(2)
 
     with col1:
-        machines_body = st.number_input("Body Machines", 1, 30, 4)
-        machines_paint = st.number_input("Paint Machines", 1, 30, 4)
-        machines_engine = st.number_input("Engine Machines", 1, 30, 4)
-        machines_final = st.number_input("Final Machines", 1, 30, 4)
+        machines_body = st.number_input("Body Machines", 1, 20, 4)
+        machines_paint = st.number_input("Paint Machines", 1, 20, 4)
+        machines_engine = st.number_input("Engine Machines", 1, 20, 4)
+        machines_final = st.number_input("Final Machines", 1, 20, 4)
 
     with col2:
         overtime = st.number_input("Overtime Hours", 0, 200, 20)
         maintenance_eff = st.slider("Maintenance Efficiency", 0.0, 1.0, 0.5)
 
+    yearly_hours = AVAILABLE_HOURS_MONTH * 12
     total_machines = machines_body + machines_paint + machines_engine + machines_final
 
     # =====================================================
-    # LIVE COST PREVIEW (NO DEMAND SHOCK YET)
+    # LIVE COST PREVIEW
     # =====================================================
 
-    yearly_hours = AVAILABLE_HOURS_MONTH * 12
     machine_cost_preview = MACHINE_COST_PER_HOUR * total_machines * yearly_hours
     labor_cost_preview = LABOR_COST_PER_HOUR * overtime * 12
-    setup_cost_preview = SETUP_TIME * 12 * SETUP_COST_PER_HOUR
 
-    st.subheader("💰 Estimated Cost Preview (Before Demand & Inventory Effects)")
-    c1, c2, c3 = st.columns(3)
+    st.subheader("💰 Estimated Base Cost Preview")
+    c1, c2 = st.columns(2)
     c1.metric("Machine Cost (Est.)", f"₹{machine_cost_preview:,.0f}")
     c2.metric("Labor Cost (Est.)", f"₹{labor_cost_preview:,.0f}")
-    c3.metric("Setup Cost (Est.)", f"₹{setup_cost_preview:,.0f}")
 
     st.write(f"📦 Starting Inventory: {int(st.session_state.inventory)} units")
 
@@ -107,15 +118,26 @@ if current_year <= 5:
         # Inflation Shock
         inflation = np.random.uniform(0.06, 0.12)
 
-        # Production Capacity
+        # Effective Breakdown
         effective_breakdown = BREAKDOWN_PROB * (1 - maintenance_eff)
 
-        cap_body = machines_body * yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown) * 5
-        cap_paint = machines_paint * yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown) * 7
-        cap_engine = machines_engine * yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown) * 3
-        cap_final = machines_final * yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown) * 4
+        base_capacity = yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown)
 
-        production = min(cap_body, cap_paint, cap_engine, cap_final)
+        # Stage Capacities
+        cap_body = machines_body * base_capacity * BODY_FACTOR
+        cap_paint = machines_paint * base_capacity * PAINT_FACTOR
+        cap_engine = machines_engine * base_capacity * ENGINE_FACTOR
+        cap_final = machines_final * base_capacity * FINAL_FACTOR
+
+        capacities = {
+            "Body": cap_body,
+            "Paint": cap_paint,
+            "Engine": cap_engine,
+            "Final": cap_final
+        }
+
+        bottleneck_stage = min(capacities, key=capacities.get)
+        production = capacities[bottleneck_stage]
 
         # Inventory Logic
         available_units = production + st.session_state.inventory
@@ -126,7 +148,7 @@ if current_year <= 5:
         # Cost Components
         machine_cost = machine_cost_preview
         labor_cost = labor_cost_preview
-        setup_cost = setup_cost_preview
+        setup_cost = SETUP_COST_PER_YEAR
         holding_cost = ending_inventory * HOLDING_COST_PER_UNIT
         shortage_cost = shortage * SHORTAGE_PENALTY_PER_UNIT
 
@@ -143,9 +165,9 @@ if current_year <= 5:
             "Units Sold": round(units_sold),
             "Ending Inventory": round(ending_inventory),
             "Shortage": round(shortage),
+            "Bottleneck": bottleneck_stage,
             "Machine Cost": round(machine_cost),
             "Labor Cost": round(labor_cost),
-            "Setup Cost": round(setup_cost),
             "Holding Cost": round(holding_cost),
             "Shortage Cost": round(shortage_cost),
             "Inflation (%)": round(inflation * 100, 2),
@@ -158,7 +180,7 @@ if current_year <= 5:
         st.session_state.total_units += units_sold
         st.session_state.year += 1
 
-        st.success(f"Year {current_year} completed.")
+        st.success(f"Year {current_year} completed. Bottleneck: {bottleneck_stage}")
         st.rerun()
 
 # =====================================================
@@ -182,11 +204,11 @@ if len(st.session_state.results) > 0:
     st.subheader("📈 Demand vs Production")
     st.line_chart(df.set_index("Year")[["Demand", "Production"]])
 
-    st.subheader("💰 Cost per Unit Trend")
-    st.line_chart(df.set_index("Year")["Cost per Unit"])
-
     st.subheader("📦 Inventory Trend")
     st.line_chart(df.set_index("Year")["Ending Inventory"])
+
+    st.subheader("💰 Cost per Unit Trend")
+    st.line_chart(df.set_index("Year")["Cost per Unit"])
 
     if st.session_state.year > 5:
         st.success("🎯 5-Year Simulation Completed!")
