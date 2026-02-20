@@ -93,7 +93,7 @@ if current_year <= 5:
         production = min(cap_body, cap_paint, cap_engine, cap_final)
 
         # INVENTORY FLOW
-       available_units = production + st.session_state.inventory
+        available_units = production + st.session_state.inventory
 
         # Core inventory equation
         units_sold = min(yearly_demand, available_units)
