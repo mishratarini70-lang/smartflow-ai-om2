@@ -75,7 +75,5 @@ if st.button("Run Simulation"):
     st.write(f"Cost per Unit: ₹{cost_per_unit:.2f}")
     st.write(f"WIP: {wip:.2f}")
 
-    fig, ax = plt.subplots()
-    ax.bar(capacities.keys(), capacities.values())
-    ax.set_title("Stage Capacities")
-    st.pyplot(fig)
+    st.bar_chart(capacities)
+
