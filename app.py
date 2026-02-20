@@ -93,16 +93,15 @@ if current_year <= 5:
         production = min(cap_body, cap_paint, cap_engine, cap_final)
 
         # INVENTORY FLOW
-        available_units = production + st.session_state.inventory
+       available_units = production + st.session_state.inventory
 
-        if available_units >= yearly_demand:
-            units_sold = yearly_demand
-            ending_inventory = available_units - yearly_demand
-            shortage = 0
-        else:
-            units_sold = available_units
-            ending_inventory = 0
-            shortage = yearly_demand - available_units
+        # Core inventory equation
+        units_sold = min(yearly_demand, available_units)
+        
+        ending_inventory = max(available_units - yearly_demand, 0)
+        
+        shortage = max(yearly_demand - available_units, 0)
+
 
         # COST
         machine_cost = 400 * (cap_body + cap_paint + cap_engine + cap_final)
