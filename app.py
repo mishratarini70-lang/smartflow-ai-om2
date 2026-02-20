@@ -8,7 +8,7 @@ st.title("🚗 SmartFlow AI – Rolling 5-Year Production & Inventory Simulator"
 
 st.markdown("""
 Dynamic 5-year automobile production planning under demand and inflation uncertainty.
-Managers decide each year. Inventory carries forward.
+Managers decide year by year. Inventory carries forward.
 """)
 
 # =====================================================
@@ -34,28 +34,23 @@ st.sidebar.write("Shortage Penalty: ₹200 per unit")
 # SAFE SESSION STATE INITIALIZATION
 # =====================================================
 
-if "year" not in st.session_state:
-    st.session_state.year = 1
+defaults = {
+    "year": 1,
+    "monthly_demand": BASE_MONTHLY_DEMAND,
+    "inventory": 0,
+    "results": [],
+    "total_cost": 0,
+    "total_units": 0
+}
 
-if "monthly_demand" not in st.session_state:
-    st.session_state.monthly_demand = BASE_MONTHLY_DEMAND
-
-if "inventory" not in st.session_state:
-    st.session_state.inventory = 0
-
-if "results" not in st.session_state:
-    st.session_state.results = []
-
-if "total_cost" not in st.session_state:
-    st.session_state.total_cost = 0
-
-if "total_units" not in st.session_state:
-    st.session_state.total_units = 0
+for key, value in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 current_year = st.session_state.year
 
 # =====================================================
-# YEARLY DECISION INPUT
+# YEARLY DECISION SECTION
 # =====================================================
 
 if current_year <= 5:
@@ -65,14 +60,14 @@ if current_year <= 5:
     col1, col2 = st.columns(2)
 
     with col1:
-        machines_body = st.number_input("Body Machines", 1, 20, 3, key="body")
-        machines_paint = st.number_input("Paint Machines", 1, 20, 2, key="paint")
-        machines_engine = st.number_input("Engine Machines", 1, 20, 3, key="engine")
-        machines_final = st.number_input("Final Machines", 1, 20, 4, key="final")
+        machines_body = st.number_input("Body Machines", 1, 20, 3)
+        machines_paint = st.number_input("Paint Machines", 1, 20, 2)
+        machines_engine = st.number_input("Engine Machines", 1, 20, 3)
+        machines_final = st.number_input("Final Machines", 1, 20, 4)
 
     with col2:
-        overtime = st.number_input("Overtime Hours", 0, 200, 20, key="ot")
-        maintenance_eff = st.slider("Maintenance Efficiency", 0.0, 1.0, 0.5, key="maint")
+        overtime = st.number_input("Overtime Hours", 0, 200, 20)
+        maintenance_eff = st.slider("Maintenance Efficiency", 0.0, 1.0, 0.5)
 
     st.write(f"📦 Starting Inventory: {int(st.session_state.inventory)} units")
 
@@ -109,7 +104,7 @@ if current_year <= 5:
             ending_inventory = 0
             shortage = yearly_demand - available_units
 
-        # COST CALCULATION
+        # COST
         machine_cost = 400 * (cap_body + cap_paint + cap_engine + cap_final)
         labor_cost = 50 * overtime * 12
         setup_cost = SETUP_TIME * 12 * 10
@@ -121,12 +116,8 @@ if current_year <= 5:
 
         cost_per_unit = total_cost / max(units_sold, 1)
 
-        # STORE RESULTS
-        st.session_state.inventory = ending_inventory
-        st.session_state.total_cost += total_cost
-        st.session_state.total_units += units_sold
-
-        st.session_state.results.append({
+        # STORE RESULTS (CONSISTENT STRUCTURE)
+        row = {
             "Year": current_year,
             "Demand Growth (%)": round(demand_growth * 100, 2),
             "Demand": round(yearly_demand, 0),
@@ -137,14 +128,20 @@ if current_year <= 5:
             "Inflation (%)": round(inflation * 100, 2),
             "Total Cost": round(total_cost, 0),
             "Cost per Unit": round(cost_per_unit, 2)
-        })
+        }
 
+        st.session_state.results.append(row)
+
+        st.session_state.inventory = ending_inventory
+        st.session_state.total_cost += total_cost
+        st.session_state.total_units += units_sold
         st.session_state.year += 1
-        st.success(f"Year {current_year} simulated successfully.")
+
+        st.success(f"Year {current_year} completed.")
         st.rerun()
 
 # =====================================================
-# DISPLAY RESULTS SAFELY
+# DISPLAY SECTION (DEFENSIVE)
 # =====================================================
 
 if len(st.session_state.results) > 0:
@@ -157,19 +154,24 @@ if len(st.session_state.results) > 0:
     avg_cost = st.session_state.total_cost / max(st.session_state.total_units, 1)
 
     colA, colB, colC = st.columns(3)
-
     colA.metric("Cumulative Avg Cost per Unit", f"₹{avg_cost:,.2f}")
     colB.metric("Total Units Sold", f"{int(st.session_state.total_units):,}")
     colC.metric("Ending Inventory", f"{int(st.session_state.inventory):,}")
 
-    st.subheader("📈 Demand vs Production")
-    st.line_chart(df.set_index("Year")[["Demand", "Production"]])
+    # Only plot if required columns exist
+    if "Year" in df.columns:
 
-    st.subheader("📦 Inventory Trend")
-    st.line_chart(df.set_index("Year")["Ending Inventory"])
+        if {"Demand", "Production"}.issubset(df.columns):
+            st.subheader("📈 Demand vs Production")
+            st.line_chart(df.set_index("Year")[["Demand", "Production"]])
 
-    st.subheader("💰 Cost per Unit Trend")
-    st.line_chart(df.set_index("Year")["Cost per Unit"])
+        if "Ending Inventory" in df.columns:
+            st.subheader("📦 Inventory Trend")
+            st.line_chart(df.set_index("Year")["Ending Inventory"])
+
+        if "Cost per Unit" in df.columns:
+            st.subheader("💰 Cost per Unit Trend")
+            st.line_chart(df.set_index("Year")["Cost per Unit"])
 
     if st.session_state.year > 5:
         st.success("🎯 5-Year Simulation Completed!")
