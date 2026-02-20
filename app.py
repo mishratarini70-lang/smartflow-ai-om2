@@ -25,6 +25,7 @@ HOLDING_COST_PER_UNIT = 50
 SHORTAGE_PENALTY_PER_UNIT = 200
 MACHINE_COST_PER_HOUR = 400
 LABOR_COST_PER_HOUR = 50
+SETUP_COST_PER_HOUR = 1000
 
 st.sidebar.header("🔒 System Assumptions")
 st.sidebar.write("Initial Monthly Demand: 10,000")
@@ -64,10 +65,10 @@ if current_year <= 5:
     col1, col2 = st.columns(2)
 
     with col1:
-        machines_body = st.number_input("Body Machines", 1, 20, 4)
-        machines_paint = st.number_input("Paint Machines", 1, 20, 4)
-        machines_engine = st.number_input("Engine Machines", 1, 20, 4)
-        machines_final = st.number_input("Final Machines", 1, 20, 4)
+        machines_body = st.number_input("Body Machines", 1, 30, 4)
+        machines_paint = st.number_input("Paint Machines", 1, 30, 4)
+        machines_engine = st.number_input("Engine Machines", 1, 30, 4)
+        machines_final = st.number_input("Final Machines", 1, 30, 4)
 
     with col2:
         overtime = st.number_input("Overtime Hours", 0, 200, 20)
@@ -82,7 +83,7 @@ if current_year <= 5:
     yearly_hours = AVAILABLE_HOURS_MONTH * 12
     machine_cost_preview = MACHINE_COST_PER_HOUR * total_machines * yearly_hours
     labor_cost_preview = LABOR_COST_PER_HOUR * overtime * 12
-    setup_cost_preview = SETUP_TIME * 12 * 10
+    setup_cost_preview = SETUP_TIME * 12 * SETUP_COST_PER_HOUR
 
     st.subheader("💰 Estimated Cost Preview (Before Demand & Inventory Effects)")
     c1, c2, c3 = st.columns(3)
@@ -109,10 +110,10 @@ if current_year <= 5:
         # Production Capacity
         effective_breakdown = BREAKDOWN_PROB * (1 - maintenance_eff)
 
-        cap_body = machines_body * yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown)
-        cap_paint = machines_paint * yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown)
-        cap_engine = machines_engine * yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown)
-        cap_final = machines_final * yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown)
+        cap_body = machines_body * yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown) * 5
+        cap_paint = machines_paint * yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown) * 7
+        cap_engine = machines_engine * yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown) * 3
+        cap_final = machines_final * yearly_hours * UNITS_PER_MACHINE_PER_HOUR * (1 - effective_breakdown) * 4
 
         production = min(cap_body, cap_paint, cap_engine, cap_final)
 
