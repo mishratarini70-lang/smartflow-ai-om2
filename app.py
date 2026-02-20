@@ -4,15 +4,15 @@ import numpy as np
 
 st.set_page_config(page_title="SmartFlow AI", layout="wide")
 
-st.title("🚗 SmartFlow AI – 5-Year Strategic Production Optimizer")
+st.title("🚗 SmartFlow AI – 5-Year Dynamic Production Simulator")
 
 st.markdown("""
-This simulation models a 4-stage automobile manufacturing flow shop 
-over a 5-year horizon incorporating macroeconomic demand trends and inflation variability.
+Dynamic 5-year automobile production optimization under demand 
+and inflation uncertainty. Managers can adjust decisions yearly.
 """)
 
 # ===============================
-# FIXED SYSTEM PARAMETERS
+# FIXED PARAMETERS
 # ===============================
 
 BASE_MONTHLY_DEMAND = 10000
@@ -20,80 +20,82 @@ BREAKDOWN_PROB = 0.08
 SETUP_TIME = 45
 AVAILABLE_HOURS_MONTH = 160
 
-# Hidden Economic Assumptions
-PROJECTED_DEMAND_GROWTH = 0.10  # 10%
-PROJECTED_INFLATION = 0.08      # 8%
-
-st.sidebar.header("🔒 Fixed Parameters")
-st.sidebar.write("Projected Annual Demand Growth: 10%")
-st.sidebar.write("Projected Annual Inflation: 8%")
-st.sidebar.write("Note: Economic shocks and variability are internally modeled.")
+st.sidebar.header("🔒 Fixed System Parameters")
+st.sidebar.write("Starting Monthly Demand (Year 0): 10,000")
+st.sidebar.write("Demand Growth Random: -10% to +25%")
+st.sidebar.write("Inflation Random: 6% to 12%")
 
 # ===============================
-# DECISION VARIABLES
+# YEARLY DECISION INPUTS
 # ===============================
 
-st.header("⚙️ Decision Variables")
+st.header("⚙️ Yearly Decision Inputs")
 
-col1, col2 = st.columns(2)
+years = 5
+yearly_inputs = []
 
-with col1:
-    machines_body = st.number_input("Machines – Body Shop", 1, 20, 3)
-    machines_paint = st.number_input("Machines – Paint Shop", 1, 20, 2)
-    machines_engine = st.number_input("Machines – Engine Assembly", 1, 20, 3)
-    machines_final = st.number_input("Machines – Final Assembly", 1, 20, 4)
+for year in range(1, years + 1):
 
-with col2:
-    overtime = st.number_input("Overtime Hours per Month", 0, 200, 20)
-    maintenance_eff = st.slider("Maintenance Efficiency (0–1)", 0.0, 1.0, 0.5)
+    st.subheader(f"Year {year} Decisions")
 
-investment_year = st.selectbox(
-    "Add 1 Extra Machine to Bottleneck in Year:",
-    [None, 2, 3, 4, 5]
-)
+    col1, col2 = st.columns(2)
+
+    with col1:
+        machines_body = st.number_input(f"Body Machines Y{year}", 1, 20, 3, key=f"body{year}")
+        machines_paint = st.number_input(f"Paint Machines Y{year}", 1, 20, 2, key=f"paint{year}")
+        machines_engine = st.number_input(f"Engine Machines Y{year}", 1, 20, 3, key=f"engine{year}")
+        machines_final = st.number_input(f"Final Machines Y{year}", 1, 20, 4, key=f"final{year}")
+
+    with col2:
+        overtime = st.number_input(f"Overtime Hours Y{year}", 0, 200, 20, key=f"ot{year}")
+        maintenance_eff = st.slider(f"Maintenance Efficiency Y{year}", 0.0, 1.0, 0.5, key=f"maint{year}")
+
+    yearly_inputs.append({
+        "machines_body": machines_body,
+        "machines_paint": machines_paint,
+        "machines_engine": machines_engine,
+        "machines_final": machines_final,
+        "overtime": overtime,
+        "maintenance_eff": maintenance_eff
+    })
 
 # ===============================
 # RUN SIMULATION
 # ===============================
 
-if st.button("🚀 Run 5-Year Simulation"):
-
-    years = 5
-    results = []
+if st.button("🚀 Run 5-Year Dynamic Simulation"):
 
     monthly_demand = BASE_MONTHLY_DEMAND
-    effective_breakdown = BREAKDOWN_PROB * (1 - maintenance_eff)
-
     total_5yr_cost = 0
     total_5yr_units = 0
+    results = []
 
     for year in range(1, years + 1):
 
-        # ===============================
-        # RANDOM DEMAND GROWTH (-10% to +25%)
-        # ===============================
+        inputs = yearly_inputs[year - 1]
 
+        # ===============================
+        # RANDOM DEMAND GROWTH
+        # ===============================
         demand_growth = np.random.uniform(-0.10, 0.25)
-
         monthly_demand *= (1 + demand_growth)
         yearly_demand = monthly_demand * 12
 
         # ===============================
-        # RANDOM INFLATION (6% to 12%)
+        # RANDOM INFLATION
         # ===============================
-
         actual_inflation = np.random.uniform(0.06, 0.12)
 
         # ===============================
-        # CAPACITY CALCULATION
+        # CAPACITY
         # ===============================
-
+        effective_breakdown = BREAKDOWN_PROB * (1 - inputs["maintenance_eff"])
         yearly_hours = AVAILABLE_HOURS_MONTH * 12
 
-        cap_body = machines_body * yearly_hours * (1 - effective_breakdown)
-        cap_paint = machines_paint * yearly_hours * (1 - effective_breakdown)
-        cap_engine = machines_engine * yearly_hours * (1 - effective_breakdown)
-        cap_final = machines_final * yearly_hours * (1 - effective_breakdown)
+        cap_body = inputs["machines_body"] * yearly_hours * (1 - effective_breakdown)
+        cap_paint = inputs["machines_paint"] * yearly_hours * (1 - effective_breakdown)
+        cap_engine = inputs["machines_engine"] * yearly_hours * (1 - effective_breakdown)
+        cap_final = inputs["machines_final"] * yearly_hours * (1 - effective_breakdown)
 
         capacities = {
             "Body Shop": cap_body,
@@ -103,19 +105,13 @@ if st.button("🚀 Run 5-Year Simulation"):
         }
 
         bottleneck = min(capacities, key=capacities.get)
-
-        # Strategic investment
-        if investment_year == year:
-            capacities[bottleneck] *= 1.2
-
         throughput = min(capacities.values())
 
         # ===============================
-        # COST CALCULATION
+        # COST
         # ===============================
-
         machine_cost = 400 * sum(capacities.values())
-        labor_cost = 50 * overtime * 12
+        labor_cost = 50 * inputs["overtime"] * 12
         setup_cost = SETUP_TIME * 12 * 10
         penalty_cost = 20000 if throughput < yearly_demand else 0
 
@@ -152,16 +148,15 @@ if st.button("🚀 Run 5-Year Simulation"):
     avg_cost_5yr = total_5yr_cost / total_5yr_units
 
     # ===============================
-    # DISPLAY RESULTS
+    # DISPLAY
     # ===============================
 
-    st.subheader("📊 5-Year Simulation Results")
+    st.subheader("📊 5-Year Results")
     st.dataframe(df, use_container_width=True)
 
     colA, colB, colC = st.columns(3)
-
     colA.metric("Average Cost per Unit (5-Year)", f"₹{avg_cost_5yr:,.2f}")
-    colB.metric("Total Units Produced (5-Year)", f"{int(total_5yr_units):,}")
+    colB.metric("Total Units Produced", f"{int(total_5yr_units):,}")
     colC.metric("Total 5-Year Cost", f"₹{int(total_5yr_cost):,}")
 
     st.subheader("📈 Demand vs Throughput")
@@ -170,17 +165,17 @@ if st.button("🚀 Run 5-Year Simulation"):
     st.subheader("💰 Cost per Unit Trend")
     st.line_chart(df.set_index("Year")["Cost per Unit"])
 
-    st.subheader("📉 Demand Growth Volatility")
+    st.subheader("📉 Demand Volatility")
     st.line_chart(df.set_index("Year")["Demand Growth (%)"])
 
-    st.subheader("📊 Inflation Variability")
+    st.subheader("📊 Inflation Volatility")
     st.line_chart(df.set_index("Year")["Inflation (%)"])
 
     st.subheader("🧠 Managerial Insight")
 
     if df["Demand Growth (%)"].min() < 0:
-        st.warning("Negative demand growth observed. Capacity flexibility becomes critical.")
+        st.warning("Demand contraction observed. Flexible capacity strategy is critical.")
     else:
-        st.success("Stable demand environment observed during simulation.")
+        st.success("Demand growth remained positive during simulation.")
 
-    st.info(f"Most Frequent Bottleneck Stage: {df['Bottleneck Stage'].mode()[0]}")
+    st.info(f"Most Frequent Bottleneck: {df['Bottleneck Stage'].mode()[0]}")
