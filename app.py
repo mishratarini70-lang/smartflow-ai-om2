@@ -7,12 +7,13 @@ st.set_page_config(page_title="SmartFlow AI", layout="wide")
 st.title("🚗 SmartFlow AI – Multi-Stage Factory Simulation")
 
 st.markdown("""
-Multi-stage factory with:
+Rolling 5-year factory simulation with:
 • Raw material ordering  
 • Lead time  
-• True stage-wise WIP buffers  
+• Stage-wise WIP buffers  
 • Finished goods inventory  
-• Demand & inflation uncertainty  
+• Demand volatility  
+• Cost breakdown  
 """)
 
 # =====================================================
@@ -20,7 +21,6 @@ Multi-stage factory with:
 # =====================================================
 
 BASE_MONTHLY_DEMAND = 10000
-BREAKDOWN_PROB = 0.08
 AVAILABLE_HOURS_MONTH = 160
 UNITS_PER_MACHINE_PER_HOUR = 7
 
@@ -35,8 +35,10 @@ HOLDING_COST_FG = 50
 HOLDING_COST_WIP = 30
 SHORTAGE_COST = 200
 
+YEARS = 5
+
 # =====================================================
-# SESSION STATE INIT
+# SAFE SESSION STATE INITIALIZATION
 # =====================================================
 
 defaults = {
@@ -60,117 +62,132 @@ for k, v in defaults.items():
 current_year = st.session_state.year
 
 # =====================================================
-# YEARLY DECISION
+# YEARLY DECISION SECTION
 # =====================================================
 
-if current_year <= 5:
+if current_year <= YEARS:
 
     st.header(f"⚙️ Year {current_year} Decision")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        machines_body = st.number_input("Body Machines", 1, 20, 4)
-        machines_paint = st.number_input("Paint Machines", 1, 20, 4)
-        machines_engine = st.number_input("Engine Machines", 1, 20, 4)
-        machines_final = st.number_input("Final Machines", 1, 20, 4)
+        machines_body = st.number_input(
+            "Body Machines", 1, 20, 4,
+            key=f"body_{current_year}"
+        )
+        machines_paint = st.number_input(
+            "Paint Machines", 1, 20, 4,
+            key=f"paint_{current_year}"
+        )
+        machines_engine = st.number_input(
+            "Engine Machines", 1, 20, 4,
+            key=f"engine_{current_year}"
+        )
+        machines_final = st.number_input(
+            "Final Machines", 1, 20, 4,
+            key=f"final_{current_year}"
+        )
 
     with col2:
-        raw_order = st.number_input("Raw Material Order Quantity", 0, 200000, 20000)
+        raw_order = st.number_input(
+            "Raw Material Order Quantity",
+            0, 200000, 20000,
+            key=f"raw_order_{current_year}"
+        )
 
     # =====================================================
-    # PROCESS RAW MATERIAL ARRIVAL
+    # SIMULATE BUTTON (UNIQUE KEY PER YEAR)
     # =====================================================
 
-    if len(st.session_state.raw_pipeline) >= RAW_LEAD_TIME:
-        arriving = st.session_state.raw_pipeline.pop(0)
-        st.session_state.raw_inventory += arriving
+    if st.button(
+        "Simulate Year",
+        key=f"simulate_year_{current_year}"
+    ):
 
-    st.session_state.raw_pipeline.append(raw_order)
+        # ---------------------------------------------
+        # RAW MATERIAL ARRIVAL (LEAD TIME)
+        # ---------------------------------------------
 
-    # =====================================================
-    # DEMAND SHOCK
-    # =====================================================
-    if st.button("Simulate Year"):
+        if len(st.session_state.raw_pipeline) >= RAW_LEAD_TIME:
+            arriving = st.session_state.raw_pipeline.pop(0)
+            st.session_state.raw_inventory += arriving
 
-        # Demand shock (ONLY ONCE PER YEAR)
+        st.session_state.raw_pipeline.append(raw_order)
+
+        # ---------------------------------------------
+        # DEMAND SHOCK (APPLIED ONCE)
+        # ---------------------------------------------
+
         demand_growth = np.random.uniform(-0.10, 0.25)
         st.session_state.monthly_demand *= (1 + demand_growth)
-        yearly_demand = st.session_state.monthly_demand * 12    
+        yearly_demand = st.session_state.monthly_demand * 12
 
-    yearly_hours = AVAILABLE_HOURS_MONTH * 12
-    base_capacity = yearly_hours * UNITS_PER_MACHINE_PER_HOUR
+        # ---------------------------------------------
+        # CAPACITY CALCULATION
+        # ---------------------------------------------
 
-    cap_body = machines_body * base_capacity * BODY_FACTOR
-    cap_paint = machines_paint * base_capacity * PAINT_FACTOR
-    cap_engine = machines_engine * base_capacity * ENGINE_FACTOR
-    cap_final = machines_final * base_capacity * FINAL_FACTOR
+        yearly_hours = AVAILABLE_HOURS_MONTH * 12
+        base_capacity = yearly_hours * UNITS_PER_MACHINE_PER_HOUR
 
-    if st.button("Simulate Year"):
+        cap_body = machines_body * base_capacity * BODY_FACTOR
+        cap_paint = machines_paint * base_capacity * PAINT_FACTOR
+        cap_engine = machines_engine * base_capacity * ENGINE_FACTOR
+        cap_final = machines_final * base_capacity * FINAL_FACTOR
 
-        # =====================================================
-        # STAGE 1: BODY (Consumes Raw Material)
-        # =====================================================
+        # ---------------------------------------------
+        # STAGE FLOW
+        # ---------------------------------------------
 
-        body_input = min(cap_body, st.session_state.raw_inventory)
-        st.session_state.raw_inventory -= body_input
-
-        body_output = body_input  # completed body units
+        # BODY
+        body_output = min(cap_body, st.session_state.raw_inventory)
+        st.session_state.raw_inventory -= body_output
         st.session_state.wip_body += body_output
 
-        # =====================================================
-        # STAGE 2: PAINT
-        # =====================================================
+        # PAINT
+        paint_output = min(cap_paint, st.session_state.wip_body)
+        st.session_state.wip_body -= paint_output
+        st.session_state.wip_paint += paint_output
 
-        paint_input = min(cap_paint, st.session_state.wip_body)
-        st.session_state.wip_body -= paint_input
-        st.session_state.wip_paint += paint_input
+        # ENGINE
+        engine_output = min(cap_engine, st.session_state.wip_paint)
+        st.session_state.wip_paint -= engine_output
+        st.session_state.wip_engine += engine_output
 
-        # =====================================================
-        # STAGE 3: ENGINE
-        # =====================================================
+        # FINAL
+        final_output = min(cap_final, st.session_state.wip_engine)
+        st.session_state.wip_engine -= final_output
 
-        engine_input = min(cap_engine, st.session_state.wip_paint)
-        st.session_state.wip_paint -= engine_input
-        st.session_state.wip_engine += engine_input
-
-        # =====================================================
-        # STAGE 4: FINAL
-        # =====================================================
-
-        final_input = min(cap_final, st.session_state.wip_engine)
-        st.session_state.wip_engine -= final_input
-
-        production = final_input
+        production = final_output
         st.session_state.fg_inventory += production
 
-        # =====================================================
+        # ---------------------------------------------
         # SALES
-        # =====================================================
+        # ---------------------------------------------
 
         units_sold = min(yearly_demand, st.session_state.fg_inventory)
         shortage = max(yearly_demand - st.session_state.fg_inventory, 0)
         st.session_state.fg_inventory -= units_sold
 
-        # =====================================================
+        # ---------------------------------------------
         # COSTS
-        # =====================================================
+        # ---------------------------------------------
 
-        raw_material_cost = raw_order * RAW_MATERIAL_COST
-        holding_cost_fg = st.session_state.fg_inventory * HOLDING_COST_FG
-        holding_cost_wip = (
+        raw_cost = raw_order * RAW_MATERIAL_COST
+        holding_fg = st.session_state.fg_inventory * HOLDING_COST_FG
+        holding_wip = (
             st.session_state.wip_body +
             st.session_state.wip_paint +
             st.session_state.wip_engine
         ) * HOLDING_COST_WIP
         shortage_cost = shortage * SHORTAGE_COST
 
-        total_cost = raw_material_cost + holding_cost_fg + holding_cost_wip + shortage_cost
+        total_cost = raw_cost + holding_fg + holding_wip + shortage_cost
         cost_per_unit = total_cost / max(units_sold, 1)
 
-        # =====================================================
+        # ---------------------------------------------
         # STORE RESULTS
-        # =====================================================
+        # ---------------------------------------------
 
         st.session_state.results.append({
             "Year": current_year,
@@ -191,11 +208,11 @@ if current_year <= 5:
         st.session_state.total_units += units_sold
         st.session_state.year += 1
 
-        st.success(f"Year {current_year} simulated.")
+        st.success(f"Year {current_year} completed.")
         st.rerun()
 
 # =====================================================
-# RESULTS
+# RESULTS SECTION
 # =====================================================
 
 if len(st.session_state.results) > 0:
@@ -205,15 +222,26 @@ if len(st.session_state.results) > 0:
     st.subheader("📊 Simulation Results")
     st.dataframe(df, use_container_width=True)
 
+    avg_cost = (
+        st.session_state.total_cost /
+        max(st.session_state.total_units, 1)
+    )
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Average Cost per Unit", f"₹{avg_cost:,.2f}")
+    col2.metric("Total Units Sold", f"{int(st.session_state.total_units):,}")
+    col3.metric("Finished Goods Inventory", f"{int(st.session_state.fg_inventory):,}")
+
     st.subheader("📈 Demand vs Production")
     st.line_chart(df.set_index("Year")[["Demand", "Production"]])
 
-    st.subheader("📦 Finished Goods Inventory")
-    st.line_chart(df.set_index("Year")["FG Inventory"])
-
-    st.subheader("🏭 WIP Inventory")
+    st.subheader("🏭 WIP Levels")
     st.line_chart(df.set_index("Year")[["WIP Body", "WIP Paint", "WIP Engine"]])
 
-if st.button("🔄 Restart Simulation"):
+# =====================================================
+# RESET
+# =====================================================
+
+if st.button("🔄 Restart Simulation", key="reset_button"):
     st.session_state.clear()
     st.rerun()
