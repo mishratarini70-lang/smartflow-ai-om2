@@ -91,10 +91,12 @@ if current_year <= 5:
     # =====================================================
     # DEMAND SHOCK
     # =====================================================
+    if st.button("Simulate Year"):
 
-    demand_growth = np.random.uniform(-0.10, 0.25)
-    st.session_state.monthly_demand *= (1 + demand_growth)
-    yearly_demand = st.session_state.monthly_demand * 12
+        # Demand shock (ONLY ONCE PER YEAR)
+        demand_growth = np.random.uniform(-0.10, 0.25)
+        st.session_state.monthly_demand *= (1 + demand_growth)
+        yearly_demand = st.session_state.monthly_demand * 12    
 
     yearly_hours = AVAILABLE_HOURS_MONTH * 12
     base_capacity = yearly_hours * UNITS_PER_MACHINE_PER_HOUR
