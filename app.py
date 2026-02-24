@@ -5,9 +5,9 @@ import math
 
 st.set_page_config(page_title="SmartFlow AI – 5 Year Strategic Simulation", layout="wide")
 
-# =====================================================
+# ==============================
 # CONSTANTS
-# =====================================================
+# ==============================
 
 DAYS = 365
 YEARS = 5
@@ -30,9 +30,9 @@ SHORTAGE_COST_BASE = 200
 ORDER_COST_BASE = 100000
 SELLING_PRICE_BASE = 3000
 
-# =====================================================
+# ==============================
 # SESSION STATE INIT
-# =====================================================
+# ==============================
 
 if "year" not in st.session_state:
     st.session_state.year = 1
@@ -47,39 +47,43 @@ if "year" not in st.session_state:
     st.session_state.shortage_cost = SHORTAGE_COST_BASE
     st.session_state.order_cost = ORDER_COST_BASE
 
-# =====================================================
+# ==============================
 # HEADER
-# =====================================================
+# ==============================
 
 st.title("🏭 5-Year Strategic Production Simulation")
 st.markdown(f"## Year {st.session_state.year}")
 
-# =====================================================
+# ==============================
 # SHOW PREVIOUS YEAR RESULTS
-# =====================================================
+# ==============================
 
 if st.session_state.results:
-    last_year = st.session_state.results[-1]
+    last = st.session_state.results[-1]
 
     st.markdown("### 📊 Previous Year Performance")
 
-    colA, colB, colC = st.columns(3)
-    colA.metric("Demand", f"{last_year[1]:,}")
-    colB.metric("Production", f"{last_year[2]:,}")
-    colC.metric("Net Profit", f"₹{last_year[3]/1e7:.2f} Cr")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Demand", f"{last[1]:,}")
+    c2.metric("Production", f"{last[2]:,}")
+    c3.metric("Net Profit", f"₹{last[3]/1e7:.2f} Cr")
 
-    colD, colE, colF = st.columns(3)
-    colD.metric("Raw Inventory", f"{last_year[5]:,}")
-    colE.metric("WIP Inventory", f"{last_year[6]:,}")
-    colF.metric("FG Inventory", f"{last_year[7]:,}")
+    c4, c5 = st.columns(2)
+    c4.metric("Cost per Unit", f"₹{last[5]:,}")
+    c5.metric("Price per Unit", f"₹{last[6]:,}")
 
-    st.metric("Service Level", f"{last_year[4]}%")
+    c6, c7, c8 = st.columns(3)
+    c6.metric("Ending Raw", f"{last[7]:,}")
+    c7.metric("Ending WIP", f"{last[8]:,}")
+    c8.metric("Ending FG", f"{last[9]:,}")
+
+    st.metric("Service Level", f"{last[4]}%")
 
     st.divider()
 
-# =====================================================
-# YEARLY DECISION PANEL
-# =====================================================
+# ==============================
+# DECISION PANEL
+# ==============================
 
 if st.session_state.year <= YEARS:
 
@@ -119,6 +123,8 @@ if st.session_state.year <= YEARS:
 
     if simulate:
 
+        # ===== Annual Growth =====
+
         demand_growth = np.random.uniform(0.10, 0.25)
         cost_inflation = np.random.uniform(0.06, 0.12)
 
@@ -150,9 +156,10 @@ if st.session_state.year <= YEARS:
         total_hold = 0
         total_short = 0
         total_order_cost = 0
-        total_orders = 0
 
         pipeline = []
+
+        # ===== Daily Simulation =====
 
         for day in range(DAYS):
 
@@ -163,13 +170,13 @@ if st.session_state.year <= YEARS:
 
             pipeline = [o for o in pipeline if o["arrival"] > day]
 
-            # Production -> becomes WIP
+            # Production -> WIP
             prod_today = min(daily_capacity, st.session_state.raw_inventory)
             st.session_state.raw_inventory -= prod_today
             st.session_state.wip_inventory += prod_today
             total_prod += prod_today
 
-            # WIP converts to FG next day
+            # WIP -> FG (1 day lag simplified)
             st.session_state.fg_inventory += st.session_state.wip_inventory
             st.session_state.wip_inventory = 0
 
@@ -183,18 +190,17 @@ if st.session_state.year <= YEARS:
             total_sold += sold_today
             total_short += short_today * st.session_state.shortage_cost
 
-            # Holding cost includes Raw + WIP + FG
+            # Holding cost
             total_hold += (
                 st.session_state.raw_inventory +
                 st.session_state.wip_inventory +
                 st.session_state.fg_inventory
             ) * st.session_state.holding_daily
 
-            # Reorder
+            # Reorder decision
             if st.session_state.raw_inventory <= reorder_point:
                 pipeline.append({"qty": eoq, "arrival": day + LEAD_TIME_DAYS})
                 total_order_cost += st.session_state.order_cost
-                total_orders += 1
 
         revenue = total_sold * st.session_state.selling_price
         raw_purchase = total_prod * st.session_state.raw_cost
@@ -203,12 +209,17 @@ if st.session_state.year <= YEARS:
         net_profit = revenue - total_cost
         service = total_sold / st.session_state.yearly_demand
 
+        cost_per_unit = total_cost / total_prod if total_prod > 0 else 0
+        price_per_unit = st.session_state.selling_price
+
         st.session_state.results.append([
             st.session_state.year,
             int(st.session_state.yearly_demand),
             int(total_prod),
             int(net_profit),
             round(service * 100, 1),
+            int(cost_per_unit),
+            int(price_per_unit),
             int(st.session_state.raw_inventory),
             int(st.session_state.wip_inventory),
             int(st.session_state.fg_inventory)
@@ -217,9 +228,9 @@ if st.session_state.year <= YEARS:
         st.session_state.year += 1
         st.rerun()
 
-# =====================================================
+# ==============================
 # FINAL RESULTS
-# =====================================================
+# ==============================
 
 if st.session_state.year > YEARS:
 
@@ -231,6 +242,8 @@ if st.session_state.year > YEARS:
             "Production",
             "Net Profit",
             "Service Level (%)",
+            "Cost per Unit",
+            "Price per Unit",
             "Ending Raw Inventory",
             "Ending WIP",
             "Ending FG Inventory"
