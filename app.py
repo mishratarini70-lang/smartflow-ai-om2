@@ -46,11 +46,16 @@ with left:
     machines_engine = st.slider("Engine Machines", 1, 20, 4)
     machines_final = st.slider("Final Assembly Machines", 1, 20, 4)
 
-    st.subheader("EOQ Policy")
+    st.subheader("Demand Settings")
+
+    demand_volatility = st.slider("Demand Volatility (%)", 5, 50, 20)
 
     yearly_demand_est = BASE_MONTHLY_DEMAND * 12
-    H_annual = HOLDING_COST_RAW_DAILY * 365
+    avg_daily_demand = yearly_demand_est / DAYS_IN_YEAR
 
+    st.subheader("EOQ Policy")
+
+    H_annual = HOLDING_COST_RAW_DAILY * 365
     recommended_eoq = math.sqrt((2 * yearly_demand_est * ORDERING_COST) / H_annual)
     recommended_eoq = int(round(recommended_eoq / LOT_SIZE) * LOT_SIZE)
     recommended_eoq = max(LOT_SIZE, recommended_eoq)
@@ -64,8 +69,7 @@ with left:
         value=recommended_eoq
     )
 
-    daily_demand_est = yearly_demand_est / DAYS_IN_YEAR
-    recommended_rop = int(daily_demand_est * LEAD_TIME_DAYS)
+    recommended_rop = int(avg_daily_demand * LEAD_TIME_DAYS)
 
     reorder_point = st.number_input(
         "Reorder Point",
@@ -89,7 +93,6 @@ with right:
 
     if simulate:
 
-        # INITIALIZE STATE
         raw_inventory = initial_raw_inventory
         fg_inventory = 0
         pipeline_orders = []
@@ -98,9 +101,6 @@ with right:
         total_raw_holding_cost = 0
         total_shortage_cost = 0
         total_revenue = 0
-
-        yearly_demand = BASE_MONTHLY_DEMAND * 12
-        daily_demand = yearly_demand / DAYS_IN_YEAR
 
         # Daily production capacity
         yearly_hours = AVAILABLE_HOURS_MONTH * 12
@@ -116,15 +116,17 @@ with right:
 
         total_production = 0
         total_units_sold = 0
+        total_orders_placed = 0
 
-        # DAY-BY-DAY SIMULATION
+        sigma = avg_daily_demand * (demand_volatility / 100)
+
         for day in range(DAYS_IN_YEAR):
 
-            # 1. Receive orders if lead time complete
-            arriving_orders = [order for order in pipeline_orders if order["arrival_day"] == day]
-            for order in arriving_orders:
+            # 1. Receive Orders
+            arriving = [o for o in pipeline_orders if o["arrival_day"] == day]
+            for order in arriving:
                 raw_inventory += order["qty"]
-            pipeline_orders = [order for order in pipeline_orders if order["arrival_day"] > day]
+            pipeline_orders = [o for o in pipeline_orders if o["arrival_day"] > day]
 
             # 2. Production
             production_today = min(daily_production_capacity, raw_inventory)
@@ -132,8 +134,10 @@ with right:
             fg_inventory += production_today
             total_production += production_today
 
-            # 3. Demand
-            demand_today = daily_demand
+            # 3. Dynamic Demand
+            demand_today = np.random.normal(avg_daily_demand, sigma)
+            demand_today = max(0, demand_today)
+
             units_sold_today = min(demand_today, fg_inventory)
             shortage_today = max(demand_today - fg_inventory, 0)
 
@@ -143,16 +147,17 @@ with right:
             total_shortage_cost += shortage_today * SHORTAGE_COST
             total_revenue += units_sold_today * SELLING_PRICE
 
-            # 4. Holding cost
+            # 4. Holding Cost
             total_raw_holding_cost += raw_inventory * HOLDING_COST_RAW_DAILY
 
-            # 5. Reorder decision
+            # 5. Reorder Decision
             if raw_inventory <= reorder_point:
                 pipeline_orders.append({
                     "qty": eoq_quantity,
                     "arrival_day": day + LEAD_TIME_DAYS
                 })
                 total_ordering_cost += ORDERING_COST
+                total_orders_placed += 1
 
         total_cost = (
             total_raw_holding_cost +
@@ -161,7 +166,7 @@ with right:
         )
 
         net_profit = total_revenue - total_cost
-        service_level = total_units_sold / yearly_demand
+        service_level = total_units_sold / (avg_daily_demand * DAYS_IN_YEAR)
 
         # =====================================================
         # OUTPUT
@@ -177,15 +182,15 @@ with right:
 
         results = pd.DataFrame({
             "Metric": [
-                "Total Orders Placed",
-                "Total Ordering Cost",
-                "Total Holding Cost",
-                "Total Shortage Cost",
+                "Orders Placed",
+                "Ordering Cost",
+                "Holding Cost",
+                "Shortage Cost",
                 "Units Sold",
                 "Ending Raw Inventory"
             ],
             "Value": [
-                len(pipeline_orders),
+                total_orders_placed,
                 int(total_ordering_cost),
                 int(total_raw_holding_cost),
                 int(total_shortage_cost),
