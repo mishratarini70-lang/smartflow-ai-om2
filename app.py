@@ -51,8 +51,26 @@ if "year" not in st.session_state:
 # =====================================================
 
 st.title("🏭 5-Year Strategic Production Simulation")
-
 st.markdown(f"## Year {st.session_state.year}")
+
+# =====================================================
+# SHOW PREVIOUS YEAR RESULTS
+# =====================================================
+
+if st.session_state.results:
+    last_year = st.session_state.results[-1]
+
+    st.markdown("### 📊 Previous Year Performance")
+
+    colA, colB, colC = st.columns(3)
+
+    colA.metric("Demand", f"{last_year[1]:,}")
+    colB.metric("Production", f"{last_year[2]:,}")
+    colC.metric("Net Profit", f"₹{last_year[3]/1e7:.2f} Cr")
+
+    st.metric("Service Level", f"{last_year[4]}%")
+
+    st.divider()
 
 # =====================================================
 # YEARLY DECISION PANEL
@@ -63,7 +81,6 @@ if st.session_state.year <= YEARS:
     col1, col2 = st.columns(2)
 
     with col1:
-
         st.subheader("Capacity Decision")
 
         machines_body = st.slider("Body Machines", 1, 20, 4)
@@ -72,12 +89,11 @@ if st.session_state.year <= YEARS:
         machines_final = st.slider("Final Machines", 1, 20, 4)
 
     with col2:
-
         st.subheader("Policy Decision")
 
         price_growth = st.slider("Price Increase %", 4, 14, 8)
 
-        # Recommended EOQ
+        # EOQ Recommendation
         H_annual = st.session_state.holding_daily * 365
         D = st.session_state.yearly_demand
         S = st.session_state.order_cost
@@ -100,7 +116,7 @@ if st.session_state.year <= YEARS:
     if simulate:
 
         # =============================
-        # APPLY ANNUAL GROWTH FACTORS
+        # APPLY ANNUAL GROWTH
         # =============================
 
         demand_growth = np.random.uniform(0.10, 0.25)
@@ -117,20 +133,19 @@ if st.session_state.year <= YEARS:
         avg_daily_demand = st.session_state.yearly_demand / DAYS
         sigma = avg_daily_demand * np.random.uniform(0.10, 0.25)
 
-        # Production capacity
+        # Production Capacity
         yearly_hours = AVAILABLE_HOURS_MONTH * 12
         base_cap = yearly_hours * UNITS_PER_MACHINE_PER_HOUR
 
-        cap = min(
+        yearly_capacity = min(
             machines_body * base_cap * BODY_FACTOR,
             machines_paint * base_cap * PAINT_FACTOR,
             machines_engine * base_cap * ENGINE_FACTOR,
             machines_final * base_cap * FINAL_FACTOR
         )
 
-        daily_capacity = cap / DAYS
+        daily_capacity = yearly_capacity / DAYS
 
-        # Year counters
         total_prod = 0
         total_sold = 0
         total_hold = 0
@@ -141,15 +156,16 @@ if st.session_state.year <= YEARS:
         pipeline = []
 
         # =============================
-        # DAILY LOOP (NO DECISION CHANGE)
+        # DAILY SIMULATION (NO POLICY CHANGE)
         # =============================
 
         for day in range(DAYS):
 
-            # Receive orders
+            # Receive Orders
             arriving = [o for o in pipeline if o["arrival"] == day]
             for order in arriving:
                 st.session_state.raw_inventory += order["qty"]
+
             pipeline = [o for o in pipeline if o["arrival"] > day]
 
             # Production
@@ -171,7 +187,7 @@ if st.session_state.year <= YEARS:
             # Holding
             total_hold += st.session_state.raw_inventory * st.session_state.holding_daily
 
-            # Reorder (policy fixed for year)
+            # Reorder
             if st.session_state.raw_inventory <= reorder_point:
                 pipeline.append({"qty": eoq, "arrival": day + LEAD_TIME_DAYS})
                 total_order_cost += st.session_state.order_cost
@@ -201,11 +217,14 @@ if st.session_state.year <= YEARS:
 
 if st.session_state.year > YEARS:
 
-    df = pd.DataFrame(st.session_state.results,
-                      columns=["Year", "Demand", "Production", "Net Profit", "Service Level (%)"])
+    df = pd.DataFrame(
+        st.session_state.results,
+        columns=["Year", "Demand", "Production", "Net Profit", "Service Level (%)"]
+    )
 
     st.success("Simulation Complete")
     st.dataframe(df, use_container_width=True)
+
     st.line_chart(df.set_index("Year")[["Demand", "Production"]])
 
     if st.button("Restart Simulation"):
