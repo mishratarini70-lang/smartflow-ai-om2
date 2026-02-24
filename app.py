@@ -75,7 +75,7 @@ with left:
 
     raw_order = st.slider(
         "Raw Material Order Quantity",
-        0, 500000, 10000
+        10000, 500000, 10000
     )
 
     st.divider()
