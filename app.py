@@ -23,7 +23,7 @@ ORDERING_COST = 100000
 LOT_SIZE = 10000
 
 RAW_MATERIAL_COST = 500
-HOLDING_COST_RAW_DAILY = 10  # ₹10 per unit per day
+HOLDING_COST_RAW_DAILY = 10
 HOLDING_COST_RAW_ANNUAL = HOLDING_COST_RAW_DAILY * 365
 
 SHORTAGE_COST = 200
@@ -54,7 +54,7 @@ for k, v in defaults.items():
 
 st.markdown("""
 # 🏭 SmartFlow AI – Production & Inventory Simulator  
-### OM-II Submission | Multi-Stage Manufacturing Decision Tool
+### OM-II | Yearly Manufacturing Simulation
 """)
 
 st.divider()
@@ -85,38 +85,32 @@ with left:
 
     if policy == "EOQ with Reorder Point":
 
-        # Recommended EOQ using previous year demand
         D = st.session_state.previous_year_demand
         S = ORDERING_COST
         H = HOLDING_COST_RAW_ANNUAL
 
         raw_eoq = math.sqrt((2 * D * S) / H)
-
-        # Round to lot size and enforce minimum
         recommended_eoq = int(round(raw_eoq / LOT_SIZE) * LOT_SIZE)
         recommended_eoq = max(LOT_SIZE, recommended_eoq)
 
-        st.success(f"📊 Recommended EOQ (based on last year): {recommended_eoq:,} units")
+        st.success(f"Recommended EOQ (based on last year): {recommended_eoq:,}")
 
         eoq_quantity = st.number_input(
             "Enter EOQ Quantity",
             min_value=LOT_SIZE,
             step=LOT_SIZE,
-            value=recommended_eoq,
-            key="eoq_input"
+            value=recommended_eoq
         )
 
-        # Reorder point using daily demand
         daily_demand_prev = D / 365
         recommended_rop = int(daily_demand_prev * LEAD_TIME_DAYS)
 
-        st.info(f"Suggested Reorder Point (15-day demand): {recommended_rop:,}")
+        st.info(f"Suggested Reorder Point: {recommended_rop:,}")
 
         reorder_point = st.number_input(
             "Enter Reorder Point",
             min_value=0,
-            value=recommended_rop,
-            key="rop_input"
+            value=recommended_rop
         )
 
     else:
@@ -125,15 +119,14 @@ with left:
             "Monthly Ordering Capacity",
             min_value=LOT_SIZE,
             step=LOT_SIZE,
-            value=10000,
-            key="monthly_input"
+            value=10000
         )
 
-        st.caption(f"Annual Equivalent: {monthly_capacity * 12:,} units")
+        st.caption(f"Annual Equivalent: {monthly_capacity * 12:,}")
 
     st.divider()
 
-    simulate = st.button("🚀 Run Simulation", key="simulate_btn")
+    simulate = st.button("🚀 Run Yearly Simulation")
 
 # =====================================================
 # RIGHT PANEL – RESULTS
@@ -143,21 +136,11 @@ with right:
 
     if simulate:
 
-        # =============================
         # ORDER DECISION
-        # =============================
-
         if policy == "EOQ with Reorder Point":
-            if st.session_state.raw_inventory <= reorder_point:
-                order_qty = eoq_quantity
-            else:
-                order_qty = 0
+            order_qty = eoq_quantity if st.session_state.raw_inventory <= reorder_point else 0
         else:
             order_qty = monthly_capacity * 12
-
-        # =============================
-        # LEAD TIME (1 cycle ≈ yearly sim)
-        # =============================
 
         if len(st.session_state.raw_pipeline) >= 1:
             arriving = st.session_state.raw_pipeline.pop(0)
@@ -167,19 +150,13 @@ with right:
 
         ordering_cost_total = ORDERING_COST if order_qty > 0 else 0
 
-        # =============================
-        # STOCHASTIC DEMAND
-        # =============================
-
+        # DEMAND (YEARLY)
         growth = np.random.uniform(-0.10, 0.25)
         st.session_state.monthly_demand *= (1 + growth)
         yearly_demand = st.session_state.monthly_demand * 12
         st.session_state.previous_year_demand = yearly_demand
 
-        # =============================
-        # CAPACITY CALCULATION
-        # =============================
-
+        # YEARLY CAPACITY
         yearly_hours = AVAILABLE_HOURS_MONTH * 12
         base_capacity = yearly_hours * UNITS_PER_MACHINE_PER_HOUR
 
@@ -188,10 +165,7 @@ with right:
         cap_engine = machines_engine * base_capacity * ENGINE_FACTOR
         cap_final = machines_final * base_capacity * FINAL_FACTOR
 
-        # =============================
-        # PRODUCTION FLOW
-        # =============================
-
+        # YEARLY PRODUCTION FLOW
         body_out = min(cap_body, st.session_state.raw_inventory)
         st.session_state.raw_inventory -= body_out
         st.session_state.wip_body += body_out
@@ -207,21 +181,15 @@ with right:
         final_out = min(cap_final, st.session_state.wip_engine)
         st.session_state.wip_engine -= final_out
 
-        production = final_out
-        st.session_state.fg_inventory += production
+        yearly_production = final_out
+        st.session_state.fg_inventory += yearly_production
 
-        # =============================
         # SALES
-        # =============================
-
         units_sold = min(yearly_demand, st.session_state.fg_inventory)
         shortage = max(yearly_demand - st.session_state.fg_inventory, 0)
         st.session_state.fg_inventory -= units_sold
 
-        # =============================
-        # COST CALCULATIONS
-        # =============================
-
+        # COSTS (YEARLY)
         daily_raw_holding_cost = st.session_state.raw_inventory * HOLDING_COST_RAW_DAILY
         yearly_raw_holding_cost = daily_raw_holding_cost * 365
 
@@ -239,14 +207,11 @@ with right:
         net_profit = revenue - total_cost
         service_level = units_sold / yearly_demand if yearly_demand > 0 else 1
 
-        # =============================
         # KPI DISPLAY
-        # =============================
-
         k1, k2, k3 = st.columns(3)
 
-        k1.metric("Net Profit", f"₹{net_profit/1e7:.2f} Cr")
-        k2.metric("Yearly Raw Holding Cost", f"₹{yearly_raw_holding_cost/1e7:.2f} Cr")
+        k1.metric("Yearly Production", f"{int(yearly_production):,}")
+        k2.metric("Net Profit", f"₹{net_profit/1e7:.2f} Cr")
         k3.metric("Service Level", f"{service_level*100:.1f}%")
 
         st.divider()
@@ -254,21 +219,19 @@ with right:
         results_df = pd.DataFrame({
             "Metric": [
                 "Yearly Demand",
-                "Production",
+                "Yearly Production",
                 "Units Sold",
                 "Order Quantity",
                 "Raw Inventory",
-                "Daily Holding Cost",
                 "Yearly Holding Cost",
                 "Total Cost"
             ],
             "Value": [
                 int(yearly_demand),
-                int(production),
+                int(yearly_production),
                 int(units_sold),
                 int(order_qty),
                 int(st.session_state.raw_inventory),
-                int(daily_raw_holding_cost),
                 int(yearly_raw_holding_cost),
                 int(total_cost)
             ]
@@ -276,12 +239,8 @@ with right:
 
         st.dataframe(results_df, use_container_width=True)
 
-# =====================================================
-# RESET BUTTON
-# =====================================================
-
 st.divider()
 
-if st.button("🔄 Reset Simulation", key="reset_btn"):
+if st.button("🔄 Reset Simulation"):
     st.session_state.clear()
     st.rerun()
