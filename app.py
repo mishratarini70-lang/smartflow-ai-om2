@@ -40,7 +40,7 @@ SHORTAGE_COST = 200
 
 defaults = {
     "monthly_demand": BASE_MONTHLY_DEMAND,
-    "raw_inventory": 50000,
+    "raw_inventory": 120000,
     "raw_pipeline": [],
     "wip_body": 0,
     "wip_paint": 0,
