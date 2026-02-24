@@ -2,15 +2,15 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-st.set_page_config(page_title="SmartFlow AI", layout="wide")
+st.set_page_config(page_title="AI Inventory Simulator", layout="wide")
 
 # =====================================================
 # HEADER
 # =====================================================
 
 st.markdown("""
-# 🚗 SmartFlow AI  
-### Multi-Stage Production & Inventory Simulation
+# 📦 AI Inventory Simulator  
+### OM-II Decision Support Tool | Optimize Inventory & Profitability
 """)
 
 st.divider()
@@ -19,208 +19,132 @@ st.divider()
 # PARAMETERS
 # =====================================================
 
-BASE_MONTHLY_DEMAND = 10000
-AVAILABLE_HOURS_MONTH = 160
-UNITS_PER_MACHINE_PER_HOUR = 7
-
-BODY_FACTOR = 5
-PAINT_FACTOR = 7
-ENGINE_FACTOR = 3
-FINAL_FACTOR = 4
-
-RAW_LEAD_TIME = 1
-RAW_MATERIAL_COST = 500
-HOLDING_COST_FG = 50
-HOLDING_COST_WIP = 30
-SHORTAGE_COST = 200
-
-YEARS = 5
-
-# =====================================================
-# SIDEBAR – SYSTEM INFO
-# =====================================================
-
-with st.sidebar:
-    st.header("⚙️ System Assumptions")
-
-    st.info("Initial Monthly Demand: 10,000")
-    st.info("Demand Growth: -10% to +25%")
-    st.info("Raw Lead Time: 1 Year")
-
-    st.divider()
-
-    if st.button("🔄 Restart Simulation", key="reset_btn"):
-        st.session_state.clear()
-        st.rerun()
-
-# =====================================================
-# SESSION STATE INIT
-# =====================================================
-
-defaults = {
-    "year": 1,
-    "monthly_demand": BASE_MONTHLY_DEMAND,
-    "raw_inventory": 50000,
-    "raw_pipeline": [],
-    "wip_body": 0,
-    "wip_paint": 0,
-    "wip_engine": 0,
-    "fg_inventory": 0,
-    "results": [],
-    "total_cost": 0,
-    "total_units": 0
+CATEGORIES = {
+    "Smartphones": {"forecast": 50000, "volatility": 0.20, "margin": 3000},
+    "Laptops": {"forecast": 15000, "volatility": 0.30, "margin": 7000},
+    "Apparel & Fashion": {"forecast": 120000, "volatility": 0.40, "margin": 600},
 }
 
-for k, v in defaults.items():
-    if k not in st.session_state:
-        st.session_state[k] = v
-
-current_year = st.session_state.year
+HOLDING_COST = 200
+STOCKOUT_COST = 1500
 
 # =====================================================
-# MAIN TABS
+# SESSION STATE
 # =====================================================
 
-tab1, tab2, tab3 = st.tabs(["🎯 Decision Panel", "📊 Results Dashboard", "🏭 Inventory Flow"])
+if "results" not in st.session_state:
+    st.session_state.results = {}
 
 # =====================================================
-# TAB 1 – DECISION PANEL
+# MAIN LAYOUT
 # =====================================================
 
-with tab1:
+left, right = st.columns([1, 2])
 
-    if current_year <= YEARS:
+# =====================================================
+# LEFT PANEL – CATEGORY DECISIONS
+# =====================================================
 
-        st.subheader(f"Year {current_year} Decisions")
+with left:
+    st.markdown("## Category Decisions")
+    st.write("Review AI forecast and set order quantity.")
 
-        col1, col2 = st.columns(2)
+    orders = {}
 
-        with col1:
-            machines_body = st.number_input("Body Machines", 1, 20, 4, key=f"body_{current_year}")
-            machines_paint = st.number_input("Paint Machines", 1, 20, 4, key=f"paint_{current_year}")
-            machines_engine = st.number_input("Engine Machines", 1, 20, 4, key=f"engine_{current_year}")
-            machines_final = st.number_input("Final Machines", 1, 20, 4, key=f"final_{current_year}")
+    for category, data in CATEGORIES.items():
+        st.markdown(f"### {category}")
+        st.caption(f"AI Forecast: {data['forecast']:,} | Volatility: {int(data['volatility']*100)}% | Margin: ₹{data['margin']:,}")
 
-        with col2:
-            raw_order = st.number_input("Raw Material Order", 0, 200000, 20000, key=f"raw_{current_year}")
+        order_qty = st.slider(
+            f"Order Quantity – {category}",
+            min_value=0,
+            max_value=data["forecast"] * 2,
+            value=data["forecast"],
+            key=f"order_{category}"
+        )
 
+        st.write(f"Order: **{order_qty:,} units**")
         st.divider()
 
-        if st.button("🚀 Simulate Year", key=f"simulate_{current_year}"):
+        orders[category] = order_qty
 
-            # --- RAW ARRIVAL ---
-            if len(st.session_state.raw_pipeline) >= RAW_LEAD_TIME:
-                arriving = st.session_state.raw_pipeline.pop(0)
-                st.session_state.raw_inventory += arriving
+    run_sim = st.button("🚀 Run Simulation")
 
-            st.session_state.raw_pipeline.append(raw_order)
+# =====================================================
+# RIGHT PANEL – RESULTS
+# =====================================================
 
-            # --- DEMAND ---
-            growth = np.random.uniform(-0.10, 0.25)
-            st.session_state.monthly_demand *= (1 + growth)
-            yearly_demand = st.session_state.monthly_demand * 12
+with right:
 
-            # --- CAPACITY ---
-            yearly_hours = AVAILABLE_HOURS_MONTH * 12
-            base_capacity = yearly_hours * UNITS_PER_MACHINE_PER_HOUR
+    if run_sim:
 
-            cap_body = machines_body * base_capacity * BODY_FACTOR
-            cap_paint = machines_paint * base_capacity * PAINT_FACTOR
-            cap_engine = machines_engine * base_capacity * ENGINE_FACTOR
-            cap_final = machines_final * base_capacity * FINAL_FACTOR
+        total_profit = 0
+        total_holding = 0
+        total_stockout = 0
 
-            # --- FLOW ---
-            body_out = min(cap_body, st.session_state.raw_inventory)
-            st.session_state.raw_inventory -= body_out
-            st.session_state.wip_body += body_out
+        results = []
 
-            paint_out = min(cap_paint, st.session_state.wip_body)
-            st.session_state.wip_body -= paint_out
-            st.session_state.wip_paint += paint_out
+        for category, data in CATEGORIES.items():
 
-            engine_out = min(cap_engine, st.session_state.wip_paint)
-            st.session_state.wip_paint -= engine_out
-            st.session_state.wip_engine += engine_out
+            demand = int(np.random.normal(
+                data["forecast"],
+                data["forecast"] * data["volatility"]
+            ))
 
-            final_out = min(cap_final, st.session_state.wip_engine)
-            st.session_state.wip_engine -= final_out
+            order = orders[category]
 
-            production = final_out
-            st.session_state.fg_inventory += production
+            sold = min(order, demand)
+            leftover = max(order - demand, 0)
+            stockout = max(demand - order, 0)
 
-            # --- SALES ---
-            units_sold = min(yearly_demand, st.session_state.fg_inventory)
-            shortage = max(yearly_demand - st.session_state.fg_inventory, 0)
-            st.session_state.fg_inventory -= units_sold
+            profit = sold * data["margin"]
+            holding_cost = leftover * HOLDING_COST
+            stockout_cost = stockout * STOCKOUT_COST
 
-            # --- COST ---
-            total_cost = (
-                raw_order * RAW_MATERIAL_COST +
-                st.session_state.fg_inventory * HOLDING_COST_FG +
-                (st.session_state.wip_body +
-                 st.session_state.wip_paint +
-                 st.session_state.wip_engine) * HOLDING_COST_WIP +
-                shortage * SHORTAGE_COST
-            )
+            net_profit = profit - holding_cost - stockout_cost
 
-            cost_per_unit = total_cost / max(units_sold, 1)
+            service_level = sold / demand if demand > 0 else 1
 
-            st.session_state.results.append({
-                "Year": current_year,
-                "Demand": round(yearly_demand),
-                "Production": round(production),
-                "Units Sold": round(units_sold),
-                "FG Inventory": round(st.session_state.fg_inventory),
-                "Total Cost": round(total_cost),
-                "Cost per Unit": round(cost_per_unit, 2)
+            total_profit += net_profit
+            total_holding += holding_cost
+            total_stockout += stockout_cost
+
+            results.append({
+                "Category": category,
+                "Service Level": round(service_level * 100, 1),
+                "Leftover": leftover,
+                "Profit": net_profit
             })
 
-            st.session_state.total_cost += total_cost
-            st.session_state.total_units += units_sold
-            st.session_state.year += 1
+        # =====================================================
+        # KPI CARDS
+        # =====================================================
 
-            st.success("Simulation Complete")
-            st.rerun()
+        col1, col2, col3 = st.columns(3)
 
-    else:
-        st.success("🎯 5-Year Simulation Completed!")
-
-# =====================================================
-# TAB 2 – RESULTS DASHBOARD
-# =====================================================
-
-with tab2:
-
-    if len(st.session_state.results) > 0:
-
-        df = pd.DataFrame(st.session_state.results)
-
-        avg_cost = st.session_state.total_cost / max(st.session_state.total_units, 1)
-
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Avg Cost per Unit", f"₹{avg_cost:,.2f}")
-        k2.metric("Total Units Sold", f"{int(st.session_state.total_units):,}")
-        k3.metric("Finished Goods", f"{int(st.session_state.fg_inventory):,}")
+        col1.metric("Net Profit", f"₹{total_profit/1e7:.2f} Cr")
+        col2.metric("Stockout Cost", f"₹{total_stockout/1e7:.2f} Cr")
+        col3.metric("Holding Cost", f"₹{total_holding/1e7:.2f} Cr")
 
         st.divider()
 
-        st.line_chart(df.set_index("Year")[["Demand", "Production"]])
-        st.line_chart(df.set_index("Year")["Cost per Unit"])
+        # =====================================================
+        # PERFORMANCE TABLE
+        # =====================================================
 
-        with st.expander("📄 Detailed Table"):
-            st.dataframe(df, use_container_width=True)
+        df = pd.DataFrame(results)
 
-    else:
-        st.info("Run a simulation to see results.")
+        st.markdown("## Category Performance Breakdown")
+        st.dataframe(df, use_container_width=True)
 
-# =====================================================
-# TAB 3 – INVENTORY FLOW
-# =====================================================
+        # =====================================================
+        # INSIGHT BOX
+        # =====================================================
 
-with tab3:
-
-    st.metric("Raw Inventory", int(st.session_state.raw_inventory))
-    st.metric("WIP Body", int(st.session_state.wip_body))
-    st.metric("WIP Paint", int(st.session_state.wip_paint))
-    st.metric("WIP Engine", int(st.session_state.wip_engine))
-    st.metric("Finished Goods", int(st.session_state.fg_inventory))
+        st.markdown("### 📘 Managerial Insight (OM Concept)")
+        st.info("""
+        This simulation models the **Newsvendor Problem**.
+        AI forecast gives expected demand, but volatility affects optimal order quantity.
+        Ordering exactly the forecast is rarely optimal.
+        Managers must balance underage cost (stockout) vs overage cost (holding).
+        """)
