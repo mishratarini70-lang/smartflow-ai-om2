@@ -28,8 +28,8 @@ PAINT_FACTOR = 7
 ENGINE_FACTOR = 3
 FINAL_FACTOR = 4
 
-# Inventory Policy Constants
-LEAD_TIME_CYCLES = 1   # 15 days approximated as 1 cycle delay
+# Inventory Constants
+LEAD_TIME_CYCLES = 1          # 15 days ≈ 1 cycle delay
 ORDERING_COST = 100000
 LOT_SIZE = 10000
 
@@ -49,8 +49,7 @@ defaults = {
     "wip_body": 0,
     "wip_paint": 0,
     "wip_engine": 0,
-    "fg_inventory": 0,
-    "results": None
+    "fg_inventory": 0
 }
 
 for k, v in defaults.items():
@@ -69,7 +68,7 @@ left, right = st.columns([1, 2])
 
 with left:
 
-    st.markdown("## Production Decisions")
+    st.markdown("## ⚙️ Production Decisions")
 
     machines_body = st.slider("Body Machines", 1, 20, 4)
     machines_paint = st.slider("Paint Machines", 1, 20, 4)
@@ -106,8 +105,10 @@ with left:
             "Monthly Ordering Capacity (units)",
             min_value=LOT_SIZE,
             step=LOT_SIZE,
-            value=50000
+            value=10000  # Default = 10,000 per month
         )
+
+        st.caption(f"Annual Equivalent: {monthly_capacity * 12:,} units")
 
     st.divider()
 
@@ -133,8 +134,8 @@ with right:
                 order_qty = 0
 
         else:
-
-            order_qty = monthly_capacity
+            # Monthly capacity converted to annual
+            order_qty = monthly_capacity * 12
 
         # -------------------------------------------------
         # LEAD TIME PROCESSING
@@ -149,7 +150,7 @@ with right:
         ordering_cost_total = ORDERING_COST if order_qty > 0 else 0
 
         # -------------------------------------------------
-        # DEMAND SHOCK
+        # DEMAND SHOCK (annualized)
         # -------------------------------------------------
 
         growth = np.random.uniform(-0.10, 0.25)
@@ -233,7 +234,8 @@ with right:
 
         k1.metric("Net Profit", f"₹{net_profit/1e7:.2f} Cr")
         k2.metric("Ordering Cost", f"₹{ordering_cost_total/1e7:.2f} Cr")
-        k3.metric("Holding + Shortage Cost", f"₹{(holding_fg+holding_wip+shortage_cost)/1e7:.2f} Cr")
+        k3.metric("Holding + Shortage Cost",
+                  f"₹{(holding_fg + holding_wip + shortage_cost)/1e7:.2f} Cr")
 
         st.divider()
 
@@ -247,28 +249,28 @@ with right:
                 "Production",
                 "Units Sold",
                 "Service Level (%)",
+                "Order Quantity",
                 "Raw Inventory",
                 "WIP Body",
                 "WIP Paint",
                 "WIP Engine",
-                "Finished Goods Inventory",
-                "Order Quantity"
+                "Finished Goods Inventory"
             ],
             "Value": [
                 int(yearly_demand),
                 int(production),
                 int(units_sold),
                 round(service_level * 100, 1),
+                int(order_qty),
                 int(st.session_state.raw_inventory),
                 int(st.session_state.wip_body),
                 int(st.session_state.wip_paint),
                 int(st.session_state.wip_engine),
-                int(st.session_state.fg_inventory),
-                int(order_qty)
+                int(st.session_state.fg_inventory)
             ]
         })
 
-        st.markdown("## Production Performance Breakdown")
+        st.markdown("## 📊 Production Performance Breakdown")
         st.dataframe(breakdown, use_container_width=True)
 
         st.divider()
@@ -277,16 +279,16 @@ with right:
         # INSIGHT BOX
         # =====================================================
 
-        st.markdown("### 📘 Managerial Insight (OM Concept)")
+        st.markdown("### 📘 Managerial Insight")
         st.info("""
-        This model compares Continuous Review (EOQ + ROP) and Capacity-Based Ordering policies.
-        EOQ minimizes ordering + holding trade-offs, while reorder point protects against stockouts under lead time.
-        Monthly capacity policy reflects operational or supplier constraints.
-        Profitability depends on ordering frequency, service level, and bottleneck capacity.
+        EOQ + Reorder Point represents a continuous review system.
+        Monthly Capacity Ordering reflects operational constraints.
+        Profitability depends on balancing ordering frequency, service level,
+        and bottleneck production stages.
         """)
 
 # =====================================================
-# RESET BUTTON
+# RESET
 # =====================================================
 
 st.divider()
