@@ -38,6 +38,7 @@ if "year" not in st.session_state:
     st.session_state.year = 1
     st.session_state.results = []
     st.session_state.raw_inventory = 50000
+    st.session_state.wip_inventory = 0
     st.session_state.fg_inventory = 0
     st.session_state.yearly_demand = BASE_MONTHLY_DEMAND * 12
     st.session_state.selling_price = SELLING_PRICE_BASE
@@ -63,10 +64,14 @@ if st.session_state.results:
     st.markdown("### 📊 Previous Year Performance")
 
     colA, colB, colC = st.columns(3)
-
     colA.metric("Demand", f"{last_year[1]:,}")
     colB.metric("Production", f"{last_year[2]:,}")
     colC.metric("Net Profit", f"₹{last_year[3]/1e7:.2f} Cr")
+
+    colD, colE, colF = st.columns(3)
+    colD.metric("Raw Inventory", f"{last_year[5]:,}")
+    colE.metric("WIP Inventory", f"{last_year[6]:,}")
+    colF.metric("FG Inventory", f"{last_year[7]:,}")
 
     st.metric("Service Level", f"{last_year[4]}%")
 
@@ -93,7 +98,6 @@ if st.session_state.year <= YEARS:
 
         price_growth = st.slider("Price Increase %", 4, 14, 8)
 
-        # EOQ Recommendation
         H_annual = st.session_state.holding_daily * 365
         D = st.session_state.yearly_demand
         S = st.session_state.order_cost
@@ -115,10 +119,6 @@ if st.session_state.year <= YEARS:
 
     if simulate:
 
-        # =============================
-        # APPLY ANNUAL GROWTH
-        # =============================
-
         demand_growth = np.random.uniform(0.10, 0.25)
         cost_inflation = np.random.uniform(0.06, 0.12)
 
@@ -133,7 +133,6 @@ if st.session_state.year <= YEARS:
         avg_daily_demand = st.session_state.yearly_demand / DAYS
         sigma = avg_daily_demand * np.random.uniform(0.10, 0.25)
 
-        # Production Capacity
         yearly_hours = AVAILABLE_HOURS_MONTH * 12
         base_cap = yearly_hours * UNITS_PER_MACHINE_PER_HOUR
 
@@ -155,10 +154,6 @@ if st.session_state.year <= YEARS:
 
         pipeline = []
 
-        # =============================
-        # DAILY SIMULATION (NO POLICY CHANGE)
-        # =============================
-
         for day in range(DAYS):
 
             # Receive Orders
@@ -168,11 +163,15 @@ if st.session_state.year <= YEARS:
 
             pipeline = [o for o in pipeline if o["arrival"] > day]
 
-            # Production
+            # Production -> becomes WIP
             prod_today = min(daily_capacity, st.session_state.raw_inventory)
             st.session_state.raw_inventory -= prod_today
-            st.session_state.fg_inventory += prod_today
+            st.session_state.wip_inventory += prod_today
             total_prod += prod_today
+
+            # WIP converts to FG next day
+            st.session_state.fg_inventory += st.session_state.wip_inventory
+            st.session_state.wip_inventory = 0
 
             # Demand
             demand_today = max(0, np.random.normal(avg_daily_demand, sigma))
@@ -184,8 +183,12 @@ if st.session_state.year <= YEARS:
             total_sold += sold_today
             total_short += short_today * st.session_state.shortage_cost
 
-            # Holding
-            total_hold += st.session_state.raw_inventory * st.session_state.holding_daily
+            # Holding cost includes Raw + WIP + FG
+            total_hold += (
+                st.session_state.raw_inventory +
+                st.session_state.wip_inventory +
+                st.session_state.fg_inventory
+            ) * st.session_state.holding_daily
 
             # Reorder
             if st.session_state.raw_inventory <= reorder_point:
@@ -205,7 +208,10 @@ if st.session_state.year <= YEARS:
             int(st.session_state.yearly_demand),
             int(total_prod),
             int(net_profit),
-            round(service * 100, 1)
+            round(service * 100, 1),
+            int(st.session_state.raw_inventory),
+            int(st.session_state.wip_inventory),
+            int(st.session_state.fg_inventory)
         ])
 
         st.session_state.year += 1
@@ -219,7 +225,16 @@ if st.session_state.year > YEARS:
 
     df = pd.DataFrame(
         st.session_state.results,
-        columns=["Year", "Demand", "Production", "Net Profit", "Service Level (%)"]
+        columns=[
+            "Year",
+            "Demand",
+            "Production",
+            "Net Profit",
+            "Service Level (%)",
+            "Ending Raw Inventory",
+            "Ending WIP",
+            "Ending FG Inventory"
+        ]
     )
 
     st.success("Simulation Complete")
