@@ -3,18 +3,7 @@ import pandas as pd
 import numpy as np
 import math
 
-st.set_page_config(page_title="AI Production Simulator", layout="wide")
-
-# =====================================================
-# HEADER
-# =====================================================
-
-st.markdown("""
-# 🏭 AI Production & Inventory Simulator  
-### OM-II Decision Support Tool | Multi-Stage Manufacturing Optimization
-""")
-
-st.divider()
+st.set_page_config(page_title="SmartFlow AI – OM II", layout="wide")
 
 # =====================================================
 # CONSTANTS
@@ -60,8 +49,15 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 # =====================================================
-# LAYOUT
+# HEADER
 # =====================================================
+
+st.markdown("""
+# 🏭 SmartFlow AI – Production & Inventory Simulator  
+### OM-II Submission | Multi-Stage Manufacturing Decision Tool
+""")
+
+st.divider()
 
 left, right = st.columns([1, 2])
 
@@ -71,7 +67,7 @@ left, right = st.columns([1, 2])
 
 with left:
 
-    st.markdown("## ⚙️ Production Decisions")
+    st.markdown("## ⚙️ Production Capacity")
 
     machines_body = st.slider("Body Machines", 1, 20, 4)
     machines_paint = st.slider("Paint Machines", 1, 20, 4)
@@ -89,33 +85,38 @@ with left:
 
     if policy == "EOQ with Reorder Point":
 
-        # Recommended EOQ based on previous year's demand
+        # Recommended EOQ using previous year demand
         D = st.session_state.previous_year_demand
         S = ORDERING_COST
         H = HOLDING_COST_RAW_ANNUAL
 
-        recommended_eoq = math.sqrt((2 * D * S) / H)
-        recommended_eoq = int(round(recommended_eoq / LOT_SIZE) * LOT_SIZE)
+        raw_eoq = math.sqrt((2 * D * S) / H)
 
-        st.success(f"📊 Recommended EOQ (based on last year demand): {recommended_eoq:,} units")
+        # Round to lot size and enforce minimum
+        recommended_eoq = int(round(raw_eoq / LOT_SIZE) * LOT_SIZE)
+        recommended_eoq = max(LOT_SIZE, recommended_eoq)
+
+        st.success(f"📊 Recommended EOQ (based on last year): {recommended_eoq:,} units")
 
         eoq_quantity = st.number_input(
             "Enter EOQ Quantity",
             min_value=LOT_SIZE,
             step=LOT_SIZE,
-            value=recommended_eoq
+            value=recommended_eoq,
+            key="eoq_input"
         )
 
-        # ROP calculation (daily demand × lead time)
+        # Reorder point using daily demand
         daily_demand_prev = D / 365
         recommended_rop = int(daily_demand_prev * LEAD_TIME_DAYS)
 
-        st.info(f"Suggested Reorder Point (15-day demand): {recommended_rop:,} units")
+        st.info(f"Suggested Reorder Point (15-day demand): {recommended_rop:,}")
 
         reorder_point = st.number_input(
             "Enter Reorder Point",
             min_value=0,
-            value=recommended_rop
+            value=recommended_rop,
+            key="rop_input"
         )
 
     else:
@@ -124,14 +125,15 @@ with left:
             "Monthly Ordering Capacity",
             min_value=LOT_SIZE,
             step=LOT_SIZE,
-            value=10000
+            value=10000,
+            key="monthly_input"
         )
 
         st.caption(f"Annual Equivalent: {monthly_capacity * 12:,} units")
 
     st.divider()
 
-    simulate = st.button("🚀 Run Production Simulation")
+    simulate = st.button("🚀 Run Simulation", key="simulate_btn")
 
 # =====================================================
 # RIGHT PANEL – RESULTS
@@ -142,7 +144,7 @@ with right:
     if simulate:
 
         # =============================
-        # POLICY DECISION
+        # ORDER DECISION
         # =============================
 
         if policy == "EOQ with Reorder Point":
@@ -154,7 +156,7 @@ with right:
             order_qty = monthly_capacity * 12
 
         # =============================
-        # LEAD TIME ARRIVAL
+        # LEAD TIME (1 cycle ≈ yearly sim)
         # =============================
 
         if len(st.session_state.raw_pipeline) >= 1:
@@ -166,7 +168,7 @@ with right:
         ordering_cost_total = ORDERING_COST if order_qty > 0 else 0
 
         # =============================
-        # DEMAND (STOCHASTIC)
+        # STOCHASTIC DEMAND
         # =============================
 
         growth = np.random.uniform(-0.10, 0.25)
@@ -175,7 +177,7 @@ with right:
         st.session_state.previous_year_demand = yearly_demand
 
         # =============================
-        # CAPACITY
+        # CAPACITY CALCULATION
         # =============================
 
         yearly_hours = AVAILABLE_HOURS_MONTH * 12
@@ -217,7 +219,7 @@ with right:
         st.session_state.fg_inventory -= units_sold
 
         # =============================
-        # COST CALCULATIONS (DAILY → YEARLY)
+        # COST CALCULATIONS
         # =============================
 
         daily_raw_holding_cost = st.session_state.raw_inventory * HOLDING_COST_RAW_DAILY
@@ -238,7 +240,7 @@ with right:
         service_level = units_sold / yearly_demand if yearly_demand > 0 else 1
 
         # =============================
-        # KPI CARDS
+        # KPI DISPLAY
         # =============================
 
         k1, k2, k3 = st.columns(3)
@@ -249,15 +251,16 @@ with right:
 
         st.divider()
 
-        breakdown = pd.DataFrame({
+        results_df = pd.DataFrame({
             "Metric": [
-                "Demand",
+                "Yearly Demand",
                 "Production",
                 "Units Sold",
                 "Order Quantity",
                 "Raw Inventory",
                 "Daily Holding Cost",
-                "Yearly Holding Cost"
+                "Yearly Holding Cost",
+                "Total Cost"
             ],
             "Value": [
                 int(yearly_demand),
@@ -266,18 +269,19 @@ with right:
                 int(order_qty),
                 int(st.session_state.raw_inventory),
                 int(daily_raw_holding_cost),
-                int(yearly_raw_holding_cost)
+                int(yearly_raw_holding_cost),
+                int(total_cost)
             ]
         })
 
-        st.dataframe(breakdown, use_container_width=True)
+        st.dataframe(results_df, use_container_width=True)
 
 # =====================================================
-# RESET
+# RESET BUTTON
 # =====================================================
 
 st.divider()
 
-if st.button("🔄 Reset Simulation"):
+if st.button("🔄 Reset Simulation", key="reset_btn"):
     st.session_state.clear()
     st.rerun()
