@@ -73,9 +73,9 @@ with left:
     machines_engine = st.slider("Engine Machines", 1, 20, 4)
     machines_final = st.slider("Final Assembly Machines", 1, 20, 4)
 
-    raw_order = st.number_input(
+    raw_order = st.slider(
         "Raw Material Order Quantity",
-        0, 200000, 20000
+        0, 500000, 10000
     )
 
     st.divider()
